@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>小朋友下樓梯 - NS-SHAFT Classic Arcade</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Noto+Sans+TC:wght@700;900&display=swap" rel="stylesheet">
+    <!-- 遊戲專屬樣式 -->
+    <link rel="stylesheet" href="./css/style.css">
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-2 sm:p-4 text-white overflow-hidden select-none">
+
+    <!-- 主外層容器 -->
+    <div class="flex flex-col items-center w-full max-w-lg">
+        <!-- 標題橫幅 -->
+        <div class="text-center mb-2 sm:mb-3">
+            <h1 class="text-3xl sm:text-4xl font-extrabold tracking-wider text-yellow-300 drop-shadow-[0_4px_4px_rgba(0,0,0,0.6)]">
+                小朋友下樓梯
+            </h1>
+            <p class="text-xs sm:text-sm text-cyan-200 opacity-90">經典街機 NS-SHAFT 重製版</p>
+        </div>
+
+        <!-- 畫布容器 -->
+        <div class="relative w-full max-w-[420px] aspect-[4/5] bg-slate-900 rounded-2xl overflow-hidden canvas-shadow border-4 border-yellow-400/80">
+            <!-- HUD / 頂部狀態列 (血量與分數) -->
+            <div id="hud" class="absolute top-0 left-0 right-0 p-3 flex justify-between items-center z-10 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
+                <!-- HP 愛心 -->
+                <div class="flex items-center space-x-1" id="hpContainer"></div>
+
+                <!-- 分數與歷史最高紀錄 -->
+                <div class="text-right">
+                    <div class="text-xs text-yellow-200 font-bold uppercase tracking-wider">地下 <span id="floorCount" class="text-xl sm:text-2xl text-yellow-400">B1</span> 階</div>
+                    <div class="text-[10px] text-slate-300">最高紀錄: <span id="highScoreText" class="text-cyan-300">B1</span></div>
+                </div>
+            </div>
+
+            <!-- 遊戲畫布 -->
+            <canvas id="gameCanvas" class="w-full h-full block"></canvas>
+
+            <!-- 開始遊戲畫面浮層 -->
+            <div id="startOverlay" class="absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 z-20 text-center">
+                <div class="w-20 h-20 mb-4 bg-yellow-400 rounded-full flex items-center justify-center shadow-lg animate-bounce">
+                    <span class="text-4xl">👦</span>
+                </div>
+                <h2 class="text-2xl sm:text-3xl font-extrabold text-yellow-300 mb-2">準備好挑戰了嗎？</h2>
+                <p class="text-xs sm:text-sm text-slate-300 mb-6 leading-relaxed max-w-xs">
+                    避開上方尖刺與危險樓梯！<br>
+                    使用鍵盤 <span class="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-600 text-yellow-300">←</span> <span class="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-600 text-yellow-300">→</span> 或按鈕控制左右移動。
+                </p>
+                <button id="startBtn" class="arcade-btn px-8 py-3 bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-slate-950 font-black text-lg sm:text-xl rounded-full border-2 border-white/50 tracking-wide">
+                    開始遊戲 START
+                </button>
+            </div>
+
+            <!-- 遊戲結束浮層 -->
+            <div id="gameOverOverlay" class="hidden absolute inset-0 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 z-20 text-center animate-fade-in">
+                <div class="text-5xl mb-2 animate-pulse">💥</div>
+                <h2 class="text-3xl font-black text-red-500 mb-1 drop-shadow">GAME OVER</h2>
+                <p class="text-sm text-slate-300 mb-4" id="causeOfDeathText">小朋友摔落到底部了！</p>
+
+                <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-4 w-full max-w-xs mb-6 space-y-2 text-left">
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-slate-400">本次成績:</span>
+                        <span id="finalScore" class="text-xl font-bold text-yellow-400">B0 階</span>
+                    </div>
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-slate-400">歷史最高:</span>
+                        <span id="finalHighScore" class="text-xl font-bold text-cyan-400">B0 階</span>
+                    </div>
+                </div>
+
+                <button id="restartBtn" class="arcade-btn px-8 py-3 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-slate-950 font-black text-lg sm:text-xl rounded-full border-2 border-white/50 tracking-wide">
+                    重新開始 REPLAY
+                </button>
+            </div>
+        </div>
+
+        <!-- 行動裝置觸控按鈕 -->
+        <div class="w-full max-w-[420px] flex justify-between gap-4 mt-3 sm:mt-4">
+            <button id="btnLeft" class="arcade-btn flex-1 py-4 bg-slate-800/90 border-2 border-slate-600 rounded-2xl flex items-center justify-center text-2xl active:bg-cyan-600 transition-colors">
+                👈 <span class="text-sm ml-2 font-bold text-slate-300">左 (A)</span>
+            </button>
+            <button id="btnRight" class="arcade-btn flex-1 py-4 bg-slate-800/90 border-2 border-slate-600 rounded-2xl flex items-center justify-center text-2xl active:bg-cyan-600 transition-colors">
+                <span class="text-sm mr-2 font-bold text-slate-300">右 (D)</span> 👉
+            </button>
+        </div>
+
+        <!-- 樓梯種類規則說明 -->
+        <div class="mt-4 grid grid-cols-5 gap-1.5 w-full max-w-[420px] text-[10px] text-center font-bold">
+            <div class="bg-slate-800/60 p-1.5 rounded-lg border border-slate-700">
+                <div class="w-full h-2 bg-blue-500 rounded mb-1"></div>
+                <span class="text-slate-300">普通梯</span>
+            </div>
+            <div class="bg-slate-800/60 p-1.5 rounded-lg border border-slate-700">
+                <div class="w-full h-2 bg-red-500 rounded mb-1"></div>
+                <span class="text-slate-300">尖刺梯</span>
+            </div>
+            <div class="bg-slate-800/60 p-1.5 rounded-lg border border-slate-700">
+                <div class="w-full h-2 bg-amber-500 rounded mb-1"></div>
+                <span class="text-slate-300">滾輪梯</span>
+            </div>
+            <div class="bg-slate-800/60 p-1.5 rounded-lg border border-slate-700">
+                <div class="w-full h-2 bg-emerald-400 rounded mb-1"></div>
+                <span class="text-slate-300">彈簧梯</span>
+            </div>
+            <div class="bg-slate-800/60 p-1.5 rounded-lg border border-slate-700">
+                <div class="w-full h-2 bg-orange-400 rounded mb-1"></div>
+                <span class="text-slate-300">易碎梯</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ES6 原生模組引入 -->
+    <script type="module" src="./js/main.js"></script>
+</body>
+</html>
