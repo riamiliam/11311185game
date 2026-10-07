@@ -8,8 +8,8 @@ import {
     MAX_SPEED,
     STORAGE_KEY_HIGH_SCORE,
     BOSS_FLOOR_INTERVAL
-} from './config.js';
-import { sfx } from './audio.js';
+} from './config.js?v=20261007_06';
+import { sfx } from './audio.js?v=20261007_06';
 import {
     generateInitialPlatforms,
     spawnNewPlatforms,
@@ -17,9 +17,9 @@ import {
     updateParticles,
     drawParticles,
     resetParticles
-} from './enemy.js';
-import { Player } from './player.js';
-import { Boss, WeaponItem, LaserBeam } from './boss.js';
+} from './enemy.js?v=20261007_06';
+import { Player } from './player.js?v=20261007_06';
+import { Boss, WeaponItem, LaserBeam } from './boss.js?v=20261007_06';
 
 export class GameManager {
     constructor() {
@@ -203,55 +203,51 @@ export class GameManager {
             }
         }
 
-        // 生成新平台
-        spawnNewPlatforms(this.platforms, GAME_WIDTH, GAME_HEIGHT);
+        // 生成新平台 (當玩家往下移動時，下方會不斷刷新新平台)
+        const newPlat = spawnNewPlatforms(this.platforms, GAME_WIDTH, GAME_HEIGHT);
+
+        // 魔王戰期間：新刷新的格子上以高機率 (65%) 自動隨機附加武器，讓玩家往下走時格子上隨時有武器！
+        if (this.boss && this.boss.state === 'fighting' && newPlat && newPlat.type !== 'spike') {
+            if (Math.random() < 0.65) {
+                const randomX = newPlat.x + Math.random() * (newPlat.width - 24);
+                this.weapons.push(new WeaponItem(newPlat, randomX));
+            }
+        }
 
         // 魔王系統與戰鬥處理
         if (this.boss) {
             this.boss.update(this.player);
 
-            // 在魔王戰期間，武器不斷隨機生成在主角腳下的格子，一直生成直到打敗魔王為止！
+            // 在魔王戰期間，隨著玩家往下，在玩家下方不斷刷新的格子上持續生成武器 (場上隨時保持 2~3 個武器)
             if (this.boss.state === 'fighting') {
-                if (this.weaponSpawnCooldown > 0) {
-                    this.weaponSpawnCooldown--;
-                }
-
-                // 優先取得主角目前踩著的格子 (腳下的格子)
-                let footPlatform = this.player.currentPlatform;
-
-                // 若主角在半空中跳躍或下落，尋找正下方即將踩上的合格格子
-                if (!footPlatform) {
-                    footPlatform = this.platforms.find(p =>
-                        !p.isBroken &&
-                        p.type !== 'spike' &&
-                        p.y >= this.player.y + this.player.height &&
-                        p.y <= this.player.y + 130 &&
-                        this.player.x + this.player.width >= p.x - 10 &&
-                        this.player.x <= p.x + p.width + 10
-                    );
-                }
-
-                // 若找到主角腳下的格子且該格尚未生成有效武器
-                if (footPlatform && !footPlatform.isBroken && footPlatform.type !== 'spike') {
-                    const hasWeaponOnFoot = this.weapons.some(w => !w.isCollected && w.platform === footPlatform);
-                    if (!hasWeaponOnFoot && this.weaponSpawnCooldown <= 0) {
-                        // 隨機在主角腳下附近的格子上生成武器
-                        const spawnX = this.player.x + (Math.random() - 0.5) * 16;
-                        this.weapons.push(new WeaponItem(footPlatform, spawnX));
-                        this.weaponSpawnCooldown = 15; // 短暫防重疊冷卻
-                    }
-                } else if (this.weapons.length === 0 && this.weaponSpawnCooldown <= 0) {
-                    // 若腳下暫無格子且場上無武器，立即在最近的有效下方格子補一把武器
-                    const candidate = this.platforms.find(p =>
-                        p.y > this.player.y &&
+                const activeWeapons = this.weapons.filter(w => !w.isCollected);
+                if (activeWeapons.length < 3) {
+                    // 尋找玩家當前位置與下方即將前往的合格格子
+                    const candidatePlatforms = this.platforms.filter(p =>
+                        p.y >= this.player.y - 10 &&
                         p.y < GAME_HEIGHT - 30 &&
                         !p.isBroken &&
-                        p.type !== 'spike'
+                        p.type !== 'spike' &&
+                        !this.weapons.some(w => !w.isCollected && w.platform === p)
                     );
-                    if (candidate) {
-                        this.weapons.push(new WeaponItem(candidate, this.player.x));
-                        this.weaponSpawnCooldown = 15;
+                    if (candidatePlatforms.length > 0) {
+                        const chosen = candidatePlatforms[Math.floor(Math.random() * candidatePlatforms.length)];
+                        const randomX = chosen.x + Math.random() * (chosen.width - 24);
+                        this.weapons.push(new WeaponItem(chosen, randomX));
                     }
+                }
+
+                // 若主角目前站著的格子還沒有武器，也隨機在腳邊補上一把
+                if (this.player.currentPlatform && !this.player.currentPlatform.isBroken && this.player.currentPlatform.type !== 'spike') {
+                    const hasWeaponOnFoot = this.weapons.some(w => !w.isCollected && w.platform === this.player.currentPlatform);
+                    if (!hasWeaponOnFoot && this.weaponSpawnCooldown <= 0) {
+                        const spawnX = this.player.x + (Math.random() - 0.5) * 16;
+                        this.weapons.push(new WeaponItem(this.player.currentPlatform, spawnX));
+                        this.weaponSpawnCooldown = 20;
+                    }
+                }
+                if (this.weaponSpawnCooldown > 0) {
+                    this.weaponSpawnCooldown--;
                 }
             }
 
@@ -261,13 +257,14 @@ export class GameManager {
                 weapon.update(this.scrollSpeed);
                 weapon.draw(this.ctx);
 
-                // 碰撞檢測：玩家吃武器
+                // 碰撞檢測：玩家吃武器 (微擴大判定讓跳躍下落時更容易拾取)
+                const hitboxPad = 8;
                 if (
                     !weapon.isCollected &&
-                    this.player.x < weapon.x + weapon.width &&
-                    this.player.x + this.player.width > weapon.x &&
-                    this.player.y < weapon.y + weapon.height &&
-                    this.player.y + this.player.height > weapon.y
+                    this.player.x < weapon.x + weapon.width + hitboxPad &&
+                    this.player.x + this.player.width > weapon.x - hitboxPad &&
+                    this.player.y < weapon.y + weapon.height + hitboxPad &&
+                    this.player.y + this.player.height > weapon.y - hitboxPad
                 ) {
                     weapon.isCollected = true;
                     sfx.playWeaponPickup();
@@ -286,9 +283,6 @@ export class GameManager {
                     // 魔王扣血 1 格 (5次被攻擊死亡)
                     this.boss.takeDamage(1);
 
-                    // 吃掉武器後短暫冷卻 (約 15 幀)，主角腳下的格子隨後會立刻又刷出下一把武器！
-                    this.weaponSpawnCooldown = 15;
-
                     // 檢查魔王是否被擊潰
                     if (this.boss.hp <= 0) {
                         this.bossVictoryTimer = 130;
@@ -296,7 +290,7 @@ export class GameManager {
                         this.player.increaseMaxHeart();
                         // 並且打敗後重新計算三十格！
                         this.floorsSinceBoss = 0;
-                        this.weapons = []; // 打敗魔王後立即清空武器並停止生成！
+                        this.weapons = []; // 打敗魔王後立即清空場上武器並停止生成！
                         this.updateHUD();
                     }
                 }

@@ -88,8 +88,8 @@ export class Player {
                 this.isGrounded = true;
                 this.currentPlatform = plat;
 
-                // 首次落到所有方塊時播放踩地板聲音 (彈跳格除外)
-                if (wasInAir && plat.type !== PLATFORM_TYPES.TRAMPOLINE) {
+                // 首次落到方塊時播放踩地板聲音 (彈跳格與易碎格除外，易碎格完全安靜無聲)
+                if (wasInAir && plat.type !== PLATFORM_TYPES.TRAMPOLINE && plat.type !== PLATFORM_TYPES.FRAGILE) {
                     sfx.playLand();
                 }
 

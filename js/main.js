@@ -1,8 +1,8 @@
 /**
  * 遊戲啟動入口 (main.js)
  */
-import { game } from './game.js';
-import { sfx } from './audio.js';
+import { game } from './game.js?v=20261007_06';
+import { sfx } from './audio.js?v=20261007_06';
 
 function setupGame() {
     // 初始化遊戲畫布與資料

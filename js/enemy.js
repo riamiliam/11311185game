@@ -263,6 +263,9 @@ export function spawnNewPlatforms(platforms, gameWidth = GAME_WIDTH, gameHeight 
         const nextY = lastPlatform.y + 70 + Math.random() * 20;
         const x = Math.max(10, Math.min(gameWidth - 100, Math.random() * (gameWidth - 90)));
         const type = getRandomPlatformType();
-        platforms.push(new Platform(x, nextY, type));
+        const plat = new Platform(x, nextY, type);
+        platforms.push(plat);
+        return plat;
     }
+    return null;
 }
