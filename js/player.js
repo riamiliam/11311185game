@@ -27,6 +27,7 @@ export class Player {
         this.vy = 0;
         this.hp = MAX_HP;
         this.isGrounded = false;
+        this.previouslyGrounded = false;
         this.invulnerableTimer = 0;
         this.facingRight = true;
         this.blinkFrame = 0;
@@ -63,6 +64,7 @@ export class Player {
         }
 
         // 平台碰撞檢測
+        const wasInAir = !this.previouslyGrounded;
         this.isGrounded = false;
 
         for (let i = 0; i < platforms.length; i++) {
@@ -81,6 +83,11 @@ export class Player {
                 this.vy = 0;
                 this.isGrounded = true;
 
+                // 首次落到所有方塊時播放踩地板聲音 (彈跳格除外)
+                if (wasInAir && plat.type !== PLATFORM_TYPES.TRAMPOLINE) {
+                    sfx.playLand();
+                }
+
                 // 首次接觸新平台計分
                 if (this.lastTouchedPlatform !== plat) {
                     this.lastTouchedPlatform = plat;
@@ -93,10 +100,6 @@ export class Player {
                 // 處理平台特殊機制
                 switch (plat.type) {
                     case PLATFORM_TYPES.NORMAL:
-                        if (!plat.soundPlayed) {
-                            sfx.playLand();
-                            plat.soundPlayed = true;
-                        }
                         // 普通樓梯機率恢復 1 點生命值
                         if (this.hp < MAX_HP && Math.random() < 0.1) {
                             this.hp = Math.min(MAX_HP, this.hp + 1);
@@ -109,11 +112,11 @@ export class Player {
                         if (this.invulnerableTimer === 0) {
                             this.hp -= 3;
                             this.invulnerableTimer = 30; // 無敵幀
-                            sfx.playSpike();
-                            createParticles(this.x + this.width / 2, this.y + this.height, '#ef4444', 10);
+                            sfx.playBleed(); // 尖刺流血受傷音效
+                            createParticles(this.x + this.width / 2, this.y + this.height, '#ef4444', 12);
                             if (onHpChange) onHpChange(this.hp);
                             if (this.hp <= 0) {
-                                if (onGameOver) onGameOver("踩到尖刺樓梯受傷過重！");
+                                if (onGameOver) onGameOver("踩到尖刺樓梯流血過多！");
                                 return;
                             }
                         }
@@ -129,16 +132,18 @@ export class Player {
 
                     case PLATFORM_TYPES.TRAMPOLINE:
                         this.vy = -10.5; // 超級高跳
-                        sfx.playSpring();
+                        sfx.playSpring(); // 彈跳格彈簧音效
                         createParticles(plat.x + plat.width / 2, plat.y, '#34d399', 8);
                         break;
 
                     case PLATFORM_TYPES.FRAGILE:
-                        // 碎裂計時於 platform.update 進行
+                        // 碎裂計時於 platform.update 進行，碎裂時播放 sfx.playShatter()
                         break;
                 }
             }
         }
+
+        this.previouslyGrounded = this.isGrounded;
 
         // 天花板尖刺碰撞偵測
         if (this.y <= CEILING_DANGER_Y) {
@@ -147,11 +152,11 @@ export class Player {
             if (this.invulnerableTimer === 0) {
                 this.hp -= 4;
                 this.invulnerableTimer = 25;
-                sfx.playSpike();
-                createParticles(this.x + this.width / 2, this.y, '#ef4444', 12);
+                sfx.playBleed(); // 天花板尖刺割傷流血音效
+                createParticles(this.x + this.width / 2, this.y, '#ef4444', 14);
                 if (onHpChange) onHpChange(this.hp);
                 if (this.hp <= 0) {
-                    if (onGameOver) onGameOver("被頂部的尖刺刺傷了！");
+                    if (onGameOver) onGameOver("被頂部的尖刺刺傷流血身亡！");
                     return;
                 }
             }
@@ -159,9 +164,28 @@ export class Player {
 
         // 摔出螢幕底部判定
         if (this.y > GAME_HEIGHT) {
-            sfx.playGameOver();
             if (onGameOver) onGameOver("跌落地下深淵！");
         }
+    }
+
+    /**
+     * 受到外在傷害 (如魔王火球)
+     */
+    takeDamage(amount, reason, callbacks) {
+        if (this.invulnerableTimer > 0) return false;
+        const { onHpChange, onGameOver } = callbacks;
+        this.hp -= amount;
+        this.invulnerableTimer = 34; // 受傷無敵幀
+        sfx.playBleed();
+
+        createParticles(this.x + this.width / 2, this.y + this.height / 2, '#ef4444', 14);
+        createParticles(this.x + this.width / 2, this.y + this.height / 2, '#f97316', 10);
+
+        if (onHpChange) onHpChange(this.hp);
+        if (this.hp <= 0) {
+            if (onGameOver) onGameOver(reason || "受到過多傷害陣亡！");
+        }
+        return true;
     }
 
     draw(ctx) {

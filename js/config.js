@@ -29,3 +29,8 @@ export const CEILING_DANGER_Y = 20;
 
 // 本地存儲鍵名
 export const STORAGE_KEY_HIGH_SCORE = 'nsshaft_high_score';
+
+// 魔王與戰鬥系統設定
+export const BOSS_FLOOR_INTERVAL = 50;  // 每 50 階出現一次魔王
+export const BOSS_MAX_HP = 5;           // 魔王 5 格血量 (被攻擊 5 次死亡)
+export const BOSS_ATTACK_COOLDOWN = 110; // 魔王火球投擲頻率 (幀數)

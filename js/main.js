@@ -62,6 +62,18 @@ function setupGame() {
     bindTouch(btnLeft, 'left');
     bindTouch(btnRight, 'right');
 
+    // 聲音開關按鈕綁定
+    const btnSound = document.getElementById('btnSound');
+    if (btnSound) {
+        btnSound.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sfx.init();
+            const muted = sfx.toggleMute();
+            btnSound.innerText = muted ? '🔇' : '🔊';
+            btnSound.title = muted ? '點擊開啟聲音' : '點擊靜音';
+        });
+    }
+
     // 開始與重新開始按鈕
     const startBtn = document.getElementById('startBtn');
     const restartBtn = document.getElementById('restartBtn');

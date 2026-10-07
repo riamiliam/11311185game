@@ -6,7 +6,9 @@ import {
     GAME_HEIGHT,
     INITIAL_SPEED,
     MAX_SPEED,
-    STORAGE_KEY_HIGH_SCORE
+    MAX_HP,
+    STORAGE_KEY_HIGH_SCORE,
+    BOSS_FLOOR_INTERVAL
 } from './config.js';
 import { sfx } from './audio.js';
 import {
@@ -18,6 +20,7 @@ import {
     resetParticles
 } from './enemy.js';
 import { Player } from './player.js';
+import { Boss, WeaponItem, LaserBeam } from './boss.js';
 
 export class GameManager {
     constructor() {
@@ -39,6 +42,15 @@ export class GameManager {
         // 實體
         this.player = new Player();
         this.platforms = [];
+
+        // 魔王與戰鬥系統
+        this.boss = null;
+        this.weapons = [];
+        this.lasers = [];
+        this.nextBossFloor = BOSS_FLOOR_INTERVAL; // 每 50 階
+        this.bossWarningTimer = 0;
+        this.bossVictoryTimer = 0;
+        this.screenShake = 0;
 
         // DOM 元素快取
         this.dom = {};
@@ -67,6 +79,7 @@ export class GameManager {
 
     startGame() {
         sfx.init();
+        sfx.startBgm();
 
         this.isRunning = true;
         this.isGameOver = false;
@@ -76,6 +89,15 @@ export class GameManager {
 
         this.player.reset();
         resetParticles();
+
+        // 重置魔王戰鬥實體
+        this.boss = null;
+        this.weapons = [];
+        this.lasers = [];
+        this.nextBossFloor = BOSS_FLOOR_INTERVAL;
+        this.bossWarningTimer = 0;
+        this.bossVictoryTimer = 0;
+        this.screenShake = 0;
 
         this.platforms = generateInitialPlatforms(GAME_WIDTH, GAME_HEIGHT);
         this.updateHUD();
@@ -93,6 +115,8 @@ export class GameManager {
     triggerGameOver(reason) {
         this.isRunning = false;
         this.isGameOver = true;
+        sfx.stopBgm();
+        sfx.playGameOver();
 
         if (this.dom.causeOfDeathText) {
             this.dom.causeOfDeathText.innerText = reason;
@@ -146,6 +170,19 @@ export class GameManager {
     gameLoop() {
         if (!this.isRunning) return;
 
+        // 螢幕震動計算
+        let shakeX = 0;
+        let shakeY = 0;
+        if (this.screenShake > 0) {
+            shakeX = (Math.random() - 0.5) * this.screenShake;
+            shakeY = (Math.random() - 0.5) * this.screenShake;
+            this.screenShake *= 0.88;
+            if (this.screenShake < 0.4) this.screenShake = 0;
+        }
+
+        this.ctx.save();
+        this.ctx.translate(shakeX, shakeY);
+
         // 清理畫面
         this.ctx.fillStyle = '#0f172a';
         this.ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
@@ -167,6 +204,116 @@ export class GameManager {
 
         // 生成新平台
         spawnNewPlatforms(this.platforms, GAME_WIDTH, GAME_HEIGHT);
+
+        // 觸發每 50 階魔王降臨
+        if (this.currentScore >= this.nextBossFloor && !this.boss) {
+            this.boss = new Boss(this.nextBossFloor);
+            this.bossWarningTimer = 110;
+        }
+
+        // 魔王系統與戰鬥處理
+        if (this.boss) {
+            this.boss.update(this.player);
+
+            // 在魔王戰期間，平台動態隨機生成武器道具 (最多場上保持 2 個)
+            if (this.boss.state === 'fighting' && this.weapons.length < 2) {
+                // 尋找畫面下方合適的樓梯平台 (非尖刺、未碎裂)
+                const candidates = this.platforms.filter(p =>
+                    p.y > 180 &&
+                    p.y < GAME_HEIGHT - 40 &&
+                    !p.isBroken &&
+                    p.type !== 'spike' &&
+                    !this.weapons.some(w => w.platform === p)
+                );
+                if (candidates.length > 0 && Math.random() < 0.05) {
+                    const picked = candidates[Math.floor(Math.random() * candidates.length)];
+                    this.weapons.push(new WeaponItem(picked));
+                }
+            }
+
+            // 更新並繪製武器道具
+            for (let i = this.weapons.length - 1; i >= 0; i--) {
+                const weapon = this.weapons[i];
+                weapon.update(this.scrollSpeed);
+                weapon.draw(this.ctx);
+
+                // 碰撞檢測：玩家吃武器
+                if (
+                    !weapon.isCollected &&
+                    this.player.x < weapon.x + weapon.width &&
+                    this.player.x + this.player.width > weapon.x &&
+                    this.player.y < weapon.y + weapon.height &&
+                    this.player.y + this.player.height > weapon.y
+                ) {
+                    weapon.isCollected = true;
+                    sfx.playWeaponPickup();
+                    sfx.playLaser();
+
+                    // 從玩家身上發射耀眼雷射特效貫穿魔王！
+                    const laser = new LaserBeam(
+                        this.player.x + this.player.width / 2,
+                        this.player.y + this.player.height / 2,
+                        this.boss.x + this.boss.width / 2,
+                        this.boss.y + this.boss.height / 2
+                    );
+                    this.lasers.push(laser);
+                    this.screenShake = 9;
+
+                    // 魔王扣血 1 格 (5次被攻擊死亡)
+                    this.boss.takeDamage(1);
+
+                    // 檢查魔王是否被擊潰
+                    if (this.boss.hp <= 0) {
+                        this.bossVictoryTimer = 120;
+                        this.player.hp = Math.min(MAX_HP, this.player.hp + 6); // 獎勵回血
+                        this.currentScore += 3; // 額外加贈層數
+                        this.updateHUD();
+                        this.nextBossFloor += BOSS_FLOOR_INTERVAL; // 設定下一次 50 階魔王
+                    }
+                }
+
+                if (weapon.isCollected) {
+                    this.weapons.splice(i, 1);
+                }
+            }
+
+            // 火球攻擊玩家碰撞檢測
+            for (let i = this.boss.fireballs.length - 1; i >= 0; i--) {
+                const fb = this.boss.fireballs[i];
+                const pCenterX = this.player.x + this.player.width / 2;
+                const pCenterY = this.player.y + this.player.height / 2;
+                const dist = Math.hypot(fb.x - pCenterX, fb.y - pCenterY);
+
+                if (dist < fb.radius + this.player.width * 0.42) {
+                    fb.isDead = true;
+                    sfx.playFireballHit();
+                    this.screenShake = 10;
+                    this.player.takeDamage(3, "被深淵魔王火球擊中灼傷身亡！", {
+                        onHpChange: () => this.updateHUD(),
+                        onGameOver: (reason) => this.triggerGameOver(reason)
+                    });
+                }
+            }
+
+            // 更新並繪製雷射光束
+            for (let i = this.lasers.length - 1; i >= 0; i--) {
+                const laser = this.lasers[i];
+                laser.update();
+                laser.draw(this.ctx);
+                if (laser.isDead) {
+                    this.lasers.splice(i, 1);
+                }
+            }
+
+            // 繪製魔王與魔王血條
+            this.boss.draw(this.ctx);
+
+            // 若魔王已消滅且動畫結束
+            if (this.boss.state === 'defeated' && this.boss.defeatedTimer <= 0) {
+                this.boss = null;
+                this.weapons = [];
+            }
+        }
 
         // 更新玩家
         this.player.update(this.keys, this.platforms, {
@@ -192,9 +339,50 @@ export class GameManager {
         updateParticles();
         drawParticles(this.ctx);
 
+        // 魔王降臨警告浮層橫幅
+        if (this.bossWarningTimer > 0) {
+            this.bossWarningTimer--;
+            this.drawWarningBanner();
+        }
+
+        // 魔王擊敗慶祝橫幅
+        if (this.bossVictoryTimer > 0) {
+            this.bossVictoryTimer--;
+            this.drawVictoryBanner();
+        }
+
+        this.ctx.restore();
+
         if (this.isRunning) {
             this.animationFrameId = requestAnimationFrame(this.gameLoop);
         }
+    }
+
+    drawWarningBanner() {
+        const isBlink = Math.floor(this.bossWarningTimer / 6) % 2 === 0;
+        this.ctx.save();
+        this.ctx.fillStyle = isBlink ? 'rgba(239, 68, 68, 0.9)' : 'rgba(185, 28, 28, 0.75)';
+        this.ctx.fillRect(0, 110, GAME_WIDTH, 34);
+
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = 'bold 15px sans-serif';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText('⚠️ WARNING! 深淵魔王降臨 ⚠️', GAME_WIDTH / 2, 127);
+        this.ctx.restore();
+    }
+
+    drawVictoryBanner() {
+        this.ctx.save();
+        this.ctx.fillStyle = 'rgba(16, 185, 129, 0.9)';
+        this.ctx.fillRect(0, 110, GAME_WIDTH, 34);
+
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = 'bold 14px sans-serif';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText('🏆 魔王已被擊潰！生命值大幅恢復 🏆', GAME_WIDTH / 2, 127);
+        this.ctx.restore();
     }
 }
 

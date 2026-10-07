@@ -79,7 +79,7 @@ export class Platform {
             if (this.crumbleTimer > 15) {
                 this.isBroken = true;
                 createParticles(this.x + this.width / 2, this.y + this.height / 2, '#d97706', 12);
-                sfx.playCrumble();
+                sfx.playShatter();
             }
         }
     }
