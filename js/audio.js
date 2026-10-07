@@ -310,52 +310,35 @@ export class SoundFX {
     }
 
     /**
-     * 3. 易碎方塊破裂聲 (石塊/木板清脆粉碎瓦解聲)
+     * 3. 易碎方塊破裂聲 (極短瞬間輕脆卡擦碎裂聲，僅約 0.04 秒，一瞬間結束且不刺耳)
      */
     playShatter() {
         if (!this.ctx || this.isMuted) return;
         const now = this.ctx.currentTime;
 
-        // 破碎白噪音炸裂
-        const bufferSize = this.ctx.sampleRate * 0.16;
+        const bufferSize = Math.floor(this.ctx.sampleRate * 0.04);
         const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
         const data = buffer.getChannelData(0);
         for (let i = 0; i < bufferSize; i++) {
-            data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.35));
+            data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
         }
         const noise = this.ctx.createBufferSource();
         noise.buffer = buffer;
 
         const filter = this.ctx.createBiquadFilter();
-        filter.type = 'bandpass';
-        filter.frequency.setValueAtTime(1400, now);
-        filter.frequency.exponentialRampToValueAtTime(280, now + 0.16);
-        filter.Q.setValueAtTime(2.5, now);
+        filter.type = 'highpass';
+        filter.frequency.setValueAtTime(1800, now);
 
         const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(0.42, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
-
-        // 配合碎裂低頻木屑撞擊聲
-        const woodOsc = this.ctx.createOscillator();
-        const woodGain = this.ctx.createGain();
-        woodOsc.type = 'square';
-        woodOsc.frequency.setValueAtTime(180, now);
-        woodOsc.frequency.exponentialRampToValueAtTime(40, now + 0.12);
-        woodGain.gain.setValueAtTime(0.2, now);
-        woodGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
 
         noise.connect(filter);
         filter.connect(gain);
         gain.connect(this.sfxGain);
 
-        woodOsc.connect(woodGain);
-        woodGain.connect(this.sfxGain);
-
         noise.start(now);
-        noise.stop(now + 0.16);
-        woodOsc.start(now);
-        woodOsc.stop(now + 0.12);
+        noise.stop(now + 0.04);
     }
 
     /**

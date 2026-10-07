@@ -4,7 +4,8 @@
 import {
     GAME_WIDTH,
     GAME_HEIGHT,
-    MAX_HP,
+    INITIAL_MAX_HP,
+    HP_PER_HEART,
     GRAVITY,
     PLAYER_SPEED,
     PLATFORM_TYPES,
@@ -25,7 +26,8 @@ export class Player {
         this.y = 80;
         this.vx = 0;
         this.vy = 0;
-        this.hp = MAX_HP;
+        this.maxHp = INITIAL_MAX_HP;
+        this.hp = this.maxHp;
         this.isGrounded = false;
         this.previouslyGrounded = false;
         this.invulnerableTimer = 0;
@@ -101,8 +103,8 @@ export class Player {
                 switch (plat.type) {
                     case PLATFORM_TYPES.NORMAL:
                         // 普通樓梯機率恢復 1 點生命值
-                        if (this.hp < MAX_HP && Math.random() < 0.1) {
-                            this.hp = Math.min(MAX_HP, this.hp + 1);
+                        if (this.hp < this.maxHp && Math.random() < 0.1) {
+                            this.hp = Math.min(this.maxHp, this.hp + 1);
                             createParticles(this.x + this.width / 2, this.y, '#22c55e', 5);
                             if (onHpChange) onHpChange(this.hp);
                         }
@@ -186,6 +188,16 @@ export class Player {
             if (onGameOver) onGameOver(reason || "受到過多傷害陣亡！");
         }
         return true;
+    }
+
+    /**
+     * 擊敗魔王獎勵：生命值上限永久加一顆愛心 (3 HP) 並補滿生命值
+     */
+    increaseMaxHeart(hpAmount = HP_PER_HEART) {
+        this.maxHp += hpAmount;
+        this.hp = this.maxHp; // 補滿生命值
+        createParticles(this.x + this.width / 2, this.y + this.height / 2, '#f43f5e', 24);
+        createParticles(this.x + this.width / 2, this.y + this.height / 2, '#facc15', 18);
     }
 
     draw(ctx) {

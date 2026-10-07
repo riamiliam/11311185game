@@ -17,7 +17,8 @@ export const PLATFORM_TYPES = {
 };
 
 // 玩家與遊戲數值設定
-export const MAX_HP = 12;
+export const INITIAL_MAX_HP = 12; // 初始 4 顆愛心 (12 HP)
+export const HP_PER_HEART = 3;     // 每顆愛心代表 3 點 HP
 export const INITIAL_SPEED = 1.8;
 export const MAX_SPEED = 4.5;
 export const GRAVITY = 0.42;
@@ -31,6 +32,6 @@ export const CEILING_DANGER_Y = 20;
 export const STORAGE_KEY_HIGH_SCORE = 'nsshaft_high_score';
 
 // 魔王與戰鬥系統設定
-export const BOSS_FLOOR_INTERVAL = 50;  // 每 50 階出現一次魔王
+export const BOSS_FLOOR_INTERVAL = 30;  // 每 30 階出現一次魔王 (擊敗後重新計算 30 階)
 export const BOSS_MAX_HP = 5;           // 魔王 5 格血量 (被攻擊 5 次死亡)
 export const BOSS_ATTACK_COOLDOWN = 110; // 魔王火球投擲頻率 (幀數)

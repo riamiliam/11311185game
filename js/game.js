@@ -6,7 +6,6 @@ import {
     GAME_HEIGHT,
     INITIAL_SPEED,
     MAX_SPEED,
-    MAX_HP,
     STORAGE_KEY_HIGH_SCORE,
     BOSS_FLOOR_INTERVAL
 } from './config.js';
@@ -43,11 +42,11 @@ export class GameManager {
         this.player = new Player();
         this.platforms = [];
 
-        // 魔王與戰鬥系統
+        // 魔王與戰鬥系統 (每 30 階一隻，場上有魔王時停止計算，擊敗後重新計算 30 階)
         this.boss = null;
         this.weapons = [];
         this.lasers = [];
-        this.nextBossFloor = BOSS_FLOOR_INTERVAL; // 每 50 階
+        this.floorsSinceBoss = 0; // 自上一隻魔王擊敗後走過的階數
         this.bossWarningTimer = 0;
         this.bossVictoryTimer = 0;
         this.screenShake = 0;
@@ -90,11 +89,11 @@ export class GameManager {
         this.player.reset();
         resetParticles();
 
-        // 重置魔王戰鬥實體
+        // 重置魔王戰鬥實體與計數器
         this.boss = null;
         this.weapons = [];
         this.lasers = [];
-        this.nextBossFloor = BOSS_FLOOR_INTERVAL;
+        this.floorsSinceBoss = 0;
         this.bossWarningTimer = 0;
         this.bossVictoryTimer = 0;
         this.screenShake = 0;
@@ -147,15 +146,15 @@ export class GameManager {
             this.dom.highScoreText.innerText = `B${this.highScore}`;
         }
 
-        // 更新愛心 HP
+        // 更新愛心 HP (動態根據玩家目前最大上限顯示顆數)
         if (this.dom.hpContainer) {
             this.dom.hpContainer.innerHTML = '';
-            const totalHearts = 4; // 每顆心 = 3 HP
+            const totalHearts = Math.round(this.player.maxHp / 3); // 每顆心 = 3 HP
             const activeHearts = Math.ceil(this.player.hp / 3);
 
             for (let i = 0; i < totalHearts; i++) {
                 const heart = document.createElement('span');
-                heart.className = 'text-lg sm:text-xl transition-all duration-300';
+                heart.className = 'text-sm sm:text-base transition-all duration-300';
                 if (i < activeHearts) {
                     heart.innerText = '❤️';
                 } else {
@@ -205,29 +204,25 @@ export class GameManager {
         // 生成新平台
         spawnNewPlatforms(this.platforms, GAME_WIDTH, GAME_HEIGHT);
 
-        // 觸發每 50 階魔王降臨
-        if (this.currentScore >= this.nextBossFloor && !this.boss) {
-            this.boss = new Boss(this.nextBossFloor);
-            this.bossWarningTimer = 110;
-        }
-
         // 魔王系統與戰鬥處理
         if (this.boss) {
             this.boss.update(this.player);
 
-            // 在魔王戰期間，平台動態隨機生成武器道具 (最多場上保持 2 個)
+            // 在魔王戰期間，武器在打敗魔王前都會一直持續生成 (場上維持 1~2 個武器)
             if (this.boss.state === 'fighting' && this.weapons.length < 2) {
-                // 尋找畫面下方合適的樓梯平台 (非尖刺、未碎裂)
                 const candidates = this.platforms.filter(p =>
-                    p.y > 180 &&
-                    p.y < GAME_HEIGHT - 40 &&
+                    p.y > 140 &&
+                    p.y < GAME_HEIGHT - 30 &&
                     !p.isBroken &&
                     p.type !== 'spike' &&
                     !this.weapons.some(w => w.platform === p)
                 );
-                if (candidates.length > 0 && Math.random() < 0.05) {
-                    const picked = candidates[Math.floor(Math.random() * candidates.length)];
-                    this.weapons.push(new WeaponItem(picked));
+                if (candidates.length > 0) {
+                    // 若無武器則立即補齊，若已有1個則以一定機率補第2個
+                    if (this.weapons.length === 0 || Math.random() < 0.2) {
+                        const picked = candidates[Math.floor(Math.random() * candidates.length)];
+                        this.weapons.push(new WeaponItem(picked));
+                    }
                 }
             }
 
@@ -249,7 +244,7 @@ export class GameManager {
                     sfx.playWeaponPickup();
                     sfx.playLaser();
 
-                    // 從玩家身上發射耀眼雷射特效貫穿魔王！
+                    // 從玩家身上發射耀眼雷射特效直擊魔王！
                     const laser = new LaserBeam(
                         this.player.x + this.player.width / 2,
                         this.player.y + this.player.height / 2,
@@ -264,11 +259,12 @@ export class GameManager {
 
                     // 檢查魔王是否被擊潰
                     if (this.boss.hp <= 0) {
-                        this.bossVictoryTimer = 120;
-                        this.player.hp = Math.min(MAX_HP, this.player.hp + 6); // 獎勵回血
-                        this.currentScore += 3; // 額外加贈層數
+                        this.bossVictoryTimer = 130;
+                        // 打敗魔王後生命值上限永久加一顆愛心並補滿血量
+                        this.player.increaseMaxHeart();
+                        // 並且打敗後重新計算三十格！
+                        this.floorsSinceBoss = 0;
                         this.updateHUD();
-                        this.nextBossFloor += BOSS_FLOOR_INTERVAL; // 設定下一次 50 階魔王
                     }
                 }
 
@@ -319,6 +315,17 @@ export class GameManager {
         this.player.update(this.keys, this.platforms, {
             onScoreIncrease: () => {
                 this.currentScore++;
+
+                // 場上有魔王時停止計算；無魔王時累計階數，每 30 階出現一隻魔王
+                if (!this.boss) {
+                    this.floorsSinceBoss++;
+                    if (this.floorsSinceBoss >= BOSS_FLOOR_INTERVAL) {
+                        this.boss = new Boss(this.currentScore);
+                        this.bossWarningTimer = 110;
+                        this.weapons = [];
+                    }
+                }
+
                 this.updateHUD();
             },
             onHpChange: () => {
@@ -378,10 +385,10 @@ export class GameManager {
         this.ctx.fillRect(0, 110, GAME_WIDTH, 34);
 
         this.ctx.fillStyle = '#ffffff';
-        this.ctx.font = 'bold 14px sans-serif';
+        this.ctx.font = 'bold 13px sans-serif';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
-        this.ctx.fillText('🏆 魔王已被擊潰！生命值大幅恢復 🏆', GAME_WIDTH / 2, 127);
+        this.ctx.fillText('🏆 魔王擊潰！生命上限+1顆心 🏆', GAME_WIDTH / 2, 127);
         this.ctx.restore();
     }
 }
