@@ -310,35 +310,10 @@ export class SoundFX {
     }
 
     /**
-     * 3. 易碎方塊破裂聲 (極短瞬間輕脆卡擦碎裂聲，僅約 0.04 秒，一瞬間結束且不刺耳)
+     * 3. 易碎方塊破裂聲 (已完全刪除靜音，保持安靜無噪聲)
      */
     playShatter() {
-        if (!this.ctx || this.isMuted) return;
-        const now = this.ctx.currentTime;
-
-        const bufferSize = Math.floor(this.ctx.sampleRate * 0.04);
-        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-            data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
-        }
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = buffer;
-
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'highpass';
-        filter.frequency.setValueAtTime(1800, now);
-
-        const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-
-        noise.connect(filter);
-        filter.connect(gain);
-        gain.connect(this.sfxGain);
-
-        noise.start(now);
-        noise.stop(now + 0.04);
+        // 依使用者需求已直接刪除碎裂音效
     }
 
     /**

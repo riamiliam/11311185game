@@ -30,6 +30,7 @@ export class Player {
         this.hp = this.maxHp;
         this.isGrounded = false;
         this.previouslyGrounded = false;
+        this.currentPlatform = null;
         this.invulnerableTimer = 0;
         this.facingRight = true;
         this.blinkFrame = 0;
@@ -68,6 +69,7 @@ export class Player {
         // 平台碰撞檢測
         const wasInAir = !this.previouslyGrounded;
         this.isGrounded = false;
+        this.currentPlatform = null;
 
         for (let i = 0; i < platforms.length; i++) {
             const plat = platforms[i];
@@ -84,6 +86,7 @@ export class Player {
                 this.y = plat.y - this.height;
                 this.vy = 0;
                 this.isGrounded = true;
+                this.currentPlatform = plat;
 
                 // 首次落到所有方塊時播放踩地板聲音 (彈跳格除外)
                 if (wasInAir && plat.type !== PLATFORM_TYPES.TRAMPOLINE) {

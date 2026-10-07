@@ -83,11 +83,16 @@ export class Fireball {
  * 平台上生成的雷射武器道具
  */
 export class WeaponItem {
-    constructor(platform) {
+    constructor(platform, preferredX = null) {
         this.platform = platform;
         this.width = 24;
         this.height = 24;
-        this.x = platform.x + platform.width / 2 - this.width / 2;
+
+        // 依主角位置指定生成在腳下或預設置中
+        let targetX = preferredX !== null ? preferredX : platform.x + platform.width / 2 - this.width / 2;
+        targetX = Math.max(platform.x + 4, Math.min(platform.x + platform.width - this.width - 4, targetX));
+        this.offsetX = targetX - platform.x;
+        this.x = targetX;
         this.y = platform.y - this.height - 4;
         this.isCollected = false;
         this.floatAngle = Math.random() * Math.PI * 2;
@@ -95,8 +100,8 @@ export class WeaponItem {
 
     update(scrollSpeed) {
         this.floatAngle += 0.08;
-        // 跟隨所屬平台捲動
-        this.x = this.platform.x + this.platform.width / 2 - this.width / 2;
+        // 跟隨所屬平台捲動並保持相對水平偏移
+        this.x = this.platform.x + this.offsetX;
         this.y = this.platform.y - this.height - 4 + Math.sin(this.floatAngle) * 3;
 
         // 若平台損毀或捲出畫面，武器自動消失

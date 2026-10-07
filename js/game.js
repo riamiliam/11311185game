@@ -50,6 +50,7 @@ export class GameManager {
         this.bossWarningTimer = 0;
         this.bossVictoryTimer = 0;
         this.screenShake = 0;
+        this.weaponSpawnCooldown = 0;
 
         // DOM 元素快取
         this.dom = {};
@@ -97,6 +98,7 @@ export class GameManager {
         this.bossWarningTimer = 0;
         this.bossVictoryTimer = 0;
         this.screenShake = 0;
+        this.weaponSpawnCooldown = 0;
 
         this.platforms = generateInitialPlatforms(GAME_WIDTH, GAME_HEIGHT);
         this.updateHUD();
@@ -208,20 +210,47 @@ export class GameManager {
         if (this.boss) {
             this.boss.update(this.player);
 
-            // 在魔王戰期間，武器在打敗魔王前都會一直持續生成 (場上維持 1~2 個武器)
-            if (this.boss.state === 'fighting' && this.weapons.length < 2) {
-                const candidates = this.platforms.filter(p =>
-                    p.y > 140 &&
-                    p.y < GAME_HEIGHT - 30 &&
-                    !p.isBroken &&
-                    p.type !== 'spike' &&
-                    !this.weapons.some(w => w.platform === p)
-                );
-                if (candidates.length > 0) {
-                    // 若無武器則立即補齊，若已有1個則以一定機率補第2個
-                    if (this.weapons.length === 0 || Math.random() < 0.2) {
-                        const picked = candidates[Math.floor(Math.random() * candidates.length)];
-                        this.weapons.push(new WeaponItem(picked));
+            // 在魔王戰期間，武器不斷隨機生成在主角腳下的格子，一直生成直到打敗魔王為止！
+            if (this.boss.state === 'fighting') {
+                if (this.weaponSpawnCooldown > 0) {
+                    this.weaponSpawnCooldown--;
+                }
+
+                // 優先取得主角目前踩著的格子 (腳下的格子)
+                let footPlatform = this.player.currentPlatform;
+
+                // 若主角在半空中跳躍或下落，尋找正下方即將踩上的合格格子
+                if (!footPlatform) {
+                    footPlatform = this.platforms.find(p =>
+                        !p.isBroken &&
+                        p.type !== 'spike' &&
+                        p.y >= this.player.y + this.player.height &&
+                        p.y <= this.player.y + 130 &&
+                        this.player.x + this.player.width >= p.x - 10 &&
+                        this.player.x <= p.x + p.width + 10
+                    );
+                }
+
+                // 若找到主角腳下的格子且該格尚未生成有效武器
+                if (footPlatform && !footPlatform.isBroken && footPlatform.type !== 'spike') {
+                    const hasWeaponOnFoot = this.weapons.some(w => !w.isCollected && w.platform === footPlatform);
+                    if (!hasWeaponOnFoot && this.weaponSpawnCooldown <= 0) {
+                        // 隨機在主角腳下附近的格子上生成武器
+                        const spawnX = this.player.x + (Math.random() - 0.5) * 16;
+                        this.weapons.push(new WeaponItem(footPlatform, spawnX));
+                        this.weaponSpawnCooldown = 15; // 短暫防重疊冷卻
+                    }
+                } else if (this.weapons.length === 0 && this.weaponSpawnCooldown <= 0) {
+                    // 若腳下暫無格子且場上無武器，立即在最近的有效下方格子補一把武器
+                    const candidate = this.platforms.find(p =>
+                        p.y > this.player.y &&
+                        p.y < GAME_HEIGHT - 30 &&
+                        !p.isBroken &&
+                        p.type !== 'spike'
+                    );
+                    if (candidate) {
+                        this.weapons.push(new WeaponItem(candidate, this.player.x));
+                        this.weaponSpawnCooldown = 15;
                     }
                 }
             }
@@ -257,6 +286,9 @@ export class GameManager {
                     // 魔王扣血 1 格 (5次被攻擊死亡)
                     this.boss.takeDamage(1);
 
+                    // 吃掉武器後短暫冷卻 (約 15 幀)，主角腳下的格子隨後會立刻又刷出下一把武器！
+                    this.weaponSpawnCooldown = 15;
+
                     // 檢查魔王是否被擊潰
                     if (this.boss.hp <= 0) {
                         this.bossVictoryTimer = 130;
@@ -264,6 +296,7 @@ export class GameManager {
                         this.player.increaseMaxHeart();
                         // 並且打敗後重新計算三十格！
                         this.floorsSinceBoss = 0;
+                        this.weapons = []; // 打敗魔王後立即清空武器並停止生成！
                         this.updateHUD();
                     }
                 }
